@@ -4,10 +4,10 @@ Erase image backgrounds **entirely in your browser**. Drop in one or many photos
 and BGdel cuts out the subject automatically — perfect for profile pictures and
 marketplace listings.
 
+🔗 **Live:** https://bgdel.vercel.app
+
 - 🔒 **100% private** — images never leave your device; all processing runs locally.
-- 🧠 **AI cutout** powered by [Transformers.js](https://github.com/huggingface/transformers.js)
-  with the **BiRefNet‑lite** model (MIT licensed).
-- ⚡ Runs on **WebGPU** when available, with an automatic **WASM/CPU** fallback.
+- 🧠 **AI cutout** powered by [@imgly/background-removal](https://github.com/imgly/background-removal-js).
 - 🖼️ Batch processing, background color presets + custom color, and PNG export
   (transparent or baked background).
 
@@ -26,8 +26,14 @@ python -m http.server 5500
 # then open http://127.0.0.1:5500/index.html
 ```
 
-## License & credits
+## License
 
-- App code: free to use.
-- Background‑removal model: **BiRefNet‑lite** — MIT licensed, free for commercial use.
-- Inference engine: **Transformers.js** (Apache‑2.0).
+This project is licensed under the **GNU Affero General Public License v3.0
+(AGPL-3.0)** — see [LICENSE](LICENSE).
+
+It uses [@imgly/background-removal](https://github.com/imgly/background-removal-js),
+which is also AGPL-3.0. In keeping with the AGPL, the complete source code of this
+app is published here and linked from the running site. Commercial use (including
+ads) is permitted **as long as the source stays available under the AGPL**. If you
+need to use it in a closed-source product, obtain a commercial license for the
+background-removal library from [IMG.LY](https://img.ly).

@@ -368,7 +368,7 @@
             <div class="spinner"></div>
             <div class="proc-status" id="procStatus">Warming up…</div>
             <div class="bar"></div>
-            <div class="proc-hint" id="procHint">Loading the AI cutout model. The first run downloads it once — later runs are instant.</div>
+            <div class="proc-hint" id="procHint">Loading the cutout engine. The first run downloads a small model — later runs are instant.</div>
           </div>
         </div>
 
@@ -415,86 +415,24 @@
     </div>
   </main>
 
-  <footer>Made with <b>BGdel</b> — all processing happens locally in your browser.</footer>
+  <footer>
+    Made with <b>BGdel</b> — all processing happens locally in your browser.<br />
+    Open source (<a href="https://github.com/parkstery/bgdel" target="_blank" rel="noopener" style="color:var(--terra-deep);font-weight:700;">source code</a>) ·
+    licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener" style="color:var(--terra-deep);font-weight:700;">AGPL-3.0</a> ·
+    cutout by <a href="https://github.com/imgly/background-removal-js" target="_blank" rel="noopener" style="color:var(--terra-deep);font-weight:700;">@imgly/background-removal</a>
+  </footer>
 
   <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" multiple hidden />
 
 <script type="module">
-  import { AutoModel, AutoProcessor, RawImage } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
+  import { removeBackground } from 'https://esm.sh/@imgly/background-removal@1.5.5';
 
-  // BiRefNet_lite — MIT licensed, free for commercial use (ads OK)
-  const MODEL_ID = 'onnx-community/BiRefNet_lite';
+  // model + wasm assets are hosted on IMG.LY's data CDN
+  const IMGLY_PUBLIC_PATH = 'https://staticimgly.com/@imgly/background-removal-data/1.5.5/dist/';
 
-  // Prefer WebGPU for speed, but some drivers crash BiRefNet on WebGPU
-  // (BindGroupLayout / computeSliceOffsets validation errors). We start on
-  // WebGPU and transparently fall back to WASM/CPU on the first failure.
-  let device = ('gpu' in navigator) ? 'webgpu' : 'wasm';
-  let modelPromise = null;
-
-  function loadModel(onProgress){
-    if(!modelPromise){
-      modelPromise = (async () => {
-        const model = await AutoModel.from_pretrained(MODEL_ID, {
-          dtype: 'fp32',
-          device,
-          progress_callback: onProgress,
-        });
-        const processor = await AutoProcessor.from_pretrained(MODEL_ID);
-        return { model, processor };
-      })();
-    }
-    return modelPromise;
-  }
-
-  // run the network → { image, mask }
-  async function infer(url, onProgress){
-    const { model, processor } = await loadModel(onProgress);
-    const image = await RawImage.fromURL(url);
-    const { pixel_values } = await processor(image);
-    const { output_image } = await model({ input_image: pixel_values });
-    const mask = await RawImage.fromTensor(
-      output_image[0].sigmoid().mul(255).to('uint8')
-    ).resize(image.width, image.height);
-    return { image, mask };
-  }
-
-  // core: turn an image URL into a transparent-PNG cutout blob
-  async function cutout(url, onProgress){
-    let res;
-    try{
-      res = await infer(url, onProgress);
-    }catch(err){
-      if(device === 'webgpu'){
-        console.warn('WebGPU failed — falling back to WASM/CPU.', err);
-        device = 'wasm';
-        modelPromise = null;            // rebuild model on CPU backend
-        setStatus('Switching to CPU…', 'Your GPU path failed — retrying on CPU (slower, but reliable).');
-        res = await infer(url, onProgress);
-      } else {
-        throw err;
-      }
-    }
-    const { image, mask } = res;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width; canvas.height = image.height;
-    const ctx = canvas.getContext('2d');
-    const bitmap = await createImageBitmap(await (await fetch(url)).blob());
-    ctx.drawImage(bitmap, 0, 0, image.width, image.height);
-    bitmap.close && bitmap.close();
-
-    const imgData = ctx.getImageData(0, 0, image.width, image.height);
-    const px = imgData.data, m = mask.data, ch = mask.channels || 1;
-    for(let i = 0, n = image.width * image.height; i < n; i++){
-      px[i*4 + 3] = m[i*ch];     // apply mask as alpha
-    }
-    ctx.putImageData(imgData, 0, 0);
-    return await new Promise(res => canvas.toBlob(res, 'image/png'));
-  }
-
-  // file:// pages can't fetch the model — the app must be served over http
+  // file:// pages can't fetch the model/wasm — the app must be served over http
   const IS_FILE = location.protocol === 'file:';
-  const SERVE_HINT = '이 페이지를 파일(file://)로 직접 열면 브라우저가 AI 모델 다운로드를 차단합니다. VS Code의 Live Server 등 http 주소(예: http://127.0.0.1:5500/index.html)로 열어 주세요.';
+  const SERVE_HINT = '이 페이지를 파일(file://)로 직접 열면 브라우저가 모델 다운로드를 차단합니다. VS Code의 Live Server 등 http 주소(예: http://127.0.0.1:5500/index.html)로 열어 주세요.';
 
   const $ = (id) => document.getElementById(id);
   const dropzone   = $('dropzone');
@@ -615,9 +553,12 @@
         if(it.id === selectedId) renderCanvas();
 
         try{
-          if(it.id === selectedId) setStatus('Removing background…', 'Analysing your image and isolating the subject.');
-          const blob = await cutout(it.originalURL, (p) => {
-            if(it.id === selectedId) updateProgress(p);
+          const blob = await removeBackground(it.originalURL, {
+            publicPath: IMGLY_PUBLIC_PATH,
+            progress: (key, current, total) => {
+              if(it.id === selectedId) updateProgress(key, current, total);
+            },
+            output: { format: 'image/png' },
           });
           it.resultBlob = blob;
           it.resultURL = URL.createObjectURL(blob);
@@ -637,16 +578,13 @@
     }
   }
 
-  function updateProgress(p){
-    // transformers.js model-download events: { status, file, progress, loaded, total }
-    if(p && p.status === 'progress'){
-      const pct = (typeof p.progress === 'number') ? Math.round(p.progress) : null;
-      setStatus('Downloading model…',
-        pct!=null ? `One-time download of the AI model — ${pct}%`
-                  : 'One-time download of the AI model. Future images skip this.');
-    } else if(p && (p.status === 'initiate' || p.status === 'download')){
-      setStatus('Downloading model…', 'One-time download of the AI model. Future images skip this.');
-    } else if(p && p.status === 'done'){
+  function updateProgress(key, current, total){
+    if(key && key.startsWith('fetch')){
+      setStatus('Downloading model…', 'One-time download of the cutout engine. Future images skip this.');
+    } else if(key && key.startsWith('compute')){
+      const pct = total ? Math.round((current/total)*100) : null;
+      setStatus('Removing background…', pct!=null ? `Analysing your image — ${pct}%` : 'Isolating the subject.');
+    } else {
       setStatus('Removing background…', 'Analysing your image and isolating the subject.');
     }
   }
@@ -674,7 +612,7 @@
     if(it.status === 'queued' || it.status === 'processing'){
       previewImg.src = it.originalURL;
       proc.style.display = 'flex';
-      setStatus('Warming up…', 'Loading the AI cutout model. The first run downloads it once — later runs are instant.');
+      setStatus('Warming up…', 'Loading the cutout engine. The first run downloads a small model — later runs are instant.');
     } else if(it.status === 'error'){
       previewImg.src = it.originalURL;
       proc.style.display = 'none';
