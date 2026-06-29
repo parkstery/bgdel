@@ -1,0 +1,9 @@
+# Local dev variants / backups — not part of the deployed app
+index-design.html
+index-function.html
+index-imgly-backup.html
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BGdel — Background Remover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --cream:        oklch(0.972 0.013 78);
+    --cream-deep:   oklch(0.945 0.018 72);
+    --surface:      oklch(0.992 0.006 80);
+    --ink:          oklch(0.28 0.012 55);
+    --ink-soft:     oklch(0.46 0.013 55);
+    --ink-faint:    oklch(0.66 0.014 60);
+    --line:         oklch(0.90 0.014 70);
+    --line-soft:    oklch(0.93 0.012 72);
+    --terra:        oklch(0.62 0.128 42);
+    --terra-deep:   oklch(0.55 0.132 40);
+    --terra-tint:   oklch(0.93 0.035 55);
+    --radius:       18px;
+    --shadow:       0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 12px 34px oklch(0.4 0.04 60 / 0.08);
+    --font: "Hanken Grotesk", system-ui, sans-serif;
+    /* concrete hex used for BOTH preview backdrop and baked export */
+    --bake-white: #ffffff;
+    --bake-dark:  #34302b;
+    --bake-terra: #c16a43;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{
+    font-family:var(--font);
+    color:var(--ink);
+    background:var(--cream);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    height:100vh;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- header ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 40px;
+    max-width:1180px; width:100%; margin:0 auto;
+  }
+  .brand{ display:flex; align-items:center; gap:11px; }
+  .brand .mark{
+    width:30px; height:30px; border-radius:9px;
+    background:var(--terra);
+    display:grid; place-items:center;
+    box-shadow:0 4px 12px oklch(0.62 0.128 42 / 0.32);
+    position:relative;
+  }
+  .brand .mark::before{
+    content:""; width:13px; height:13px; border-radius:4px;
+    background:var(--cream);
+  }
+  .brand .name{ font-weight:800; font-size:19px; letter-spacing:-0.02em; }
+  .brand .name b{ color:var(--terra-deep); font-weight:800; }
+  .tagline{
+    font-size:13px; color:var(--ink-faint); font-weight:500;
+    display:flex; align-items:center; gap:7px;
+  }
+  .tagline .dot{ width:6px; height:6px; border-radius:50%; background:var(--terra); }
+
+  /* ---------- main ---------- */
+  main{
+    flex:1; min-height:0; width:100%; max-width:1180px; margin:0 auto;
+    padding:18px 40px 24px;
+    display:flex; flex-direction:column;
+  }
+  .hero{
+    text-align:center; max-width:680px; margin:18px auto 30px;
+  }
+  .hero h1{
+    font-size:clamp(34px, 5vw, 52px); line-height:1.04;
+    letter-spacing:-0.035em; font-weight:800;
+    text-wrap:balance;
+  }
+  .hero h1 em{ font-style:normal; color:var(--terra-deep); }
+  .hero p{
+    margin-top:16px; font-size:17px; color:var(--ink-soft);
+    line-height:1.5; max-width:520px; margin-inline:auto;
+    text-wrap:pretty;
+  }
+  .privacy{
+    margin-top:16px; display:inline-flex; align-items:center; gap:8px;
+    font-size:12.5px; font-weight:600; color:var(--ink-soft);
+    background:var(--surface); border:1px solid var(--line);
+    padding:7px 13px; border-radius:999px;
+  }
+  .privacy svg{ width:13px; height:13px; }
+
+  .stage{ flex:1; min-height:0; display:flex; flex-direction:column; }
+
+  /* ---------- dropzone ---------- */
+  .dropzone{
+    flex:1; min-height:0;
+    border:1.5px dashed var(--line); border-radius:var(--radius);
+    background:
+      radial-gradient(120% 120% at 50% 0%, oklch(0.99 0.006 80) 0%, var(--cream) 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; text-align:center; padding:48px 32px;
+    cursor:pointer; transition:border-color .18s, background .18s, transform .18s;
+  }
+  .dropzone:hover{ border-color:var(--terra); }
+  .dropzone.drag{
+    border-color:var(--terra); border-style:solid;
+    background:radial-gradient(120% 120% at 50% 0%, var(--terra-tint) 0%, var(--cream) 75%);
+    transform:scale(1.005);
+  }
+  .dz-icon{
+    width:78px; height:78px; border-radius:22px;
+    background:var(--surface); border:1px solid var(--line);
+    display:grid; place-items:center; box-shadow:var(--shadow);
+    transition:transform .2s;
+  }
+  .dropzone:hover .dz-icon{ transform:translateY(-3px); }
+  .dz-icon svg{ width:34px; height:34px; color:var(--terra); }
+  .dz-title{ font-size:21px; font-weight:700; letter-spacing:-0.02em; }
+  .dz-sub{ font-size:14.5px; color:var(--ink-soft); margin-top:5px; }
+  .dz-btn{
+    margin-top:4px;
+    font-family:var(--font); font-size:15px; font-weight:700;
+    color:var(--cream); background:var(--terra);
+    border:none; border-radius:12px; padding:13px 26px; cursor:pointer;
+    box-shadow:0 6px 16px oklch(0.62 0.128 42 / 0.28);
+    transition:background .15s, transform .12s;
+  }
+  .dz-btn:hover{ background:var(--terra-deep); transform:translateY(-1px); }
+  .dz-formats{ font-size:12px; color:var(--ink-faint); font-weight:500; }
+
+  /* ---------- workspace (processing + result) ---------- */
+  .workspace{ display:none; flex:1; min-height:0; flex-direction:column; gap:14px; }
+  .workspace.show{ display:flex; }
+
+  .canvas-wrap{
+    flex:1; min-height:0; position:relative;
+    border-radius:var(--radius); overflow:hidden;
+    border:1px solid var(--line); background:var(--surface);
+    box-shadow:var(--shadow);
+    display:grid; place-items:center;
+  }
+  /* transparency checkerboard */
+  .checker{
+    --c1: oklch(0.965 0.012 78);
+    --c2: oklch(0.915 0.016 74);
+    background-color:var(--c1);
+    background-image:
+      linear-gradient(45deg, var(--c2) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--c2) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--c2) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--c2) 75%);
+    background-size:22px 22px;
+    background-position:0 0, 0 11px, 11px -11px, -11px 0;
+  }
+
+  .preview-img{
+    max-width:100%; max-height:100%;
+    width:auto; height:auto; object-fit:contain;
+    display:block;
+    -webkit-user-drag:none; user-select:none;
+  }
+
+  /* processing overlay */
+  .proc{
+    position:absolute; inset:0; z-index:5;
+    background:oklch(0.972 0.013 78 / 0.78);
+    backdrop-filter:blur(6px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px; text-align:center; padding:24px;
+  }
+  .spinner{
+    width:46px; height:46px; border-radius:50%;
+    border:3.5px solid var(--line);
+    border-top-color:var(--terra);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .proc-status{ font-size:16px; font-weight:700; letter-spacing:-0.01em; }
+  .proc-hint{ font-size:13px; color:var(--ink-soft); max-width:300px; }
+  .bar{
+    width:240px; height:6px; border-radius:99px;
+    background:var(--line); overflow:hidden; position:relative;
+  }
+  .bar::after{
+    content:""; position:absolute; inset:0;
+    width:40%; border-radius:99px; background:var(--terra);
+    animation:slide 1.25s ease-in-out infinite;
+  }
+  @keyframes slide{
+    0%{ left:-40%; } 100%{ left:100%; }
+  }
+
+  /* ---------- filmstrip (batch thumbnails) ---------- */
+  .filmstrip{
+    display:flex; gap:10px; align-items:center;
+    flex:none; overflow-x:auto; overflow-y:hidden;
+    padding-bottom:2px;
+  }
+  .thumb{
+    position:relative; width:60px; height:60px; flex:none;
+    border-radius:12px; overflow:hidden; cursor:pointer; padding:0;
+    border:2px solid var(--line); background:var(--surface);
+    transition:border-color .14s, transform .12s;
+  }
+  .thumb:hover{ transform:translateY(-2px); }
+  .thumb.active{ border-color:var(--terra); box-shadow:0 4px 12px oklch(0.62 0.128 42 / 0.22); }
+  .thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .thumb .tstatus{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:oklch(0.97 0.013 78 / 0.6); backdrop-filter:blur(1px);
+  }
+  .thumb .tstatus.done{ display:none; }
+  .mini-spin{
+    width:20px; height:20px; border-radius:50%;
+    border:2.5px solid oklch(0.85 0.02 70); border-top-color:var(--terra);
+    animation:spin .8s linear infinite;
+  }
+  .tbadge{
+    position:absolute; top:3px; right:3px; width:16px; height:16px; border-radius:50%;
+    display:grid; place-items:center; font-size:10px; font-weight:800; color:#fff;
+  }
+  .tbadge.ok{ background:var(--terra); }
+  .tbadge.err{ background:oklch(0.55 0.18 30); }
+  .thumb.add{
+    display:grid; place-items:center; border-style:dashed; background:var(--cream);
+    color:var(--terra); font-size:28px; font-weight:400; line-height:1;
+  }
+  .thumb.add:hover{ border-color:var(--terra); }
+
+  /* result toolbar */
+  .toolbar{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:18px; flex-wrap:wrap;
+  }
+  .seg{
+    display:inline-flex; background:var(--surface); border:1px solid var(--line);
+    border-radius:12px; padding:4px; gap:2px;
+  }
+  .seg button{
+    font-family:var(--font); font-size:13.5px; font-weight:600;
+    color:var(--ink-soft); background:transparent; border:none;
+    padding:8px 15px; border-radius:9px; cursor:pointer;
+    transition:background .14s, color .14s;
+  }
+  .seg button.active{ background:var(--terra); color:var(--cream); }
+  .seg button:not(.active):hover{ color:var(--ink); background:var(--cream-deep); }
+  .seg button:disabled{ opacity:.4; cursor:not-allowed; }
+
+  .bd-group{ display:flex; align-items:center; gap:10px; }
+  .bd-label{ font-size:12.5px; font-weight:600; color:var(--ink-faint); }
+  .swatches{ display:flex; gap:7px; align-items:center; }
+  .sw{
+    width:26px; height:26px; border-radius:8px; cursor:pointer;
+    border:2px solid var(--line); padding:0; transition:transform .12s;
+  }
+  .sw:hover{ transform:scale(1.08); }
+  .sw.active{ border-color:var(--ink); }
+  .sw.transparent{
+    background:
+      linear-gradient(45deg, var(--line) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--line) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--line) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--line) 75%);
+    background-size:10px 10px;
+    background-position:0 0,0 5px,5px -5px,-5px 0;
+    background-color:#fff;
+  }
+  /* custom color swatch (wraps a hidden color input) */
+  .sw.custom{
+    position:relative; overflow:hidden;
+    background:conic-gradient(from 0deg, #f43f5e, #f59e0b, #eab308, #22c55e, #3b82f6, #a855f7, #f43f5e);
+  }
+  .sw.custom input[type=color]{
+    position:absolute; inset:0; width:100%; height:100%;
+    opacity:0; cursor:pointer; border:none; padding:0;
+  }
+  .sw.custom.active{ border-color:var(--ink); }
+
+  .actions{ display:flex; align-items:center; gap:12px; }
+  .btn{
+    font-family:var(--font); font-size:14.5px; font-weight:700;
+    border-radius:12px; padding:12px 22px; cursor:pointer;
+    transition:background .15s, transform .12s, border-color .15s;
+    display:inline-flex; align-items:center; gap:9px;
+  }
+  .btn svg{ width:17px; height:17px; }
+  .btn-primary{
+    color:var(--cream); background:var(--terra); border:1px solid var(--terra);
+    box-shadow:0 6px 16px oklch(0.62 0.128 42 / 0.28);
+  }
+  .btn-primary:hover{ background:var(--terra-deep); transform:translateY(-1px); }
+  .btn-primary:disabled{ opacity:.45; cursor:not-allowed; transform:none; box-shadow:none; }
+  .btn-ghost{
+    color:var(--ink); background:var(--surface); border:1px solid var(--line);
+  }
+  .btn-ghost:hover{ background:var(--cream-deep); }
+  .btn-ghost:disabled{ opacity:.45; cursor:not-allowed; }
+
+  .errbox{
+    display:none; margin-top:4px;
+    background:oklch(0.95 0.04 30); border:1px solid oklch(0.82 0.09 32);
+    color:oklch(0.42 0.12 32); border-radius:12px;
+    padding:13px 16px; font-size:13.5px; font-weight:600;
+    align-items:center; gap:10px;
+  }
+  .errbox.show{ display:flex; }
+
+  footer{
+    text-align:center; padding:20px; font-size:12.5px;
+    color:var(--ink-faint); font-weight:500;
+  }
+  footer b{ color:var(--terra-deep); font-weight:700; }
+
+  @media (max-width:640px){
+    header,main{ padding-inline:20px; }
+    .tagline{ display:none; }
+    .toolbar{ flex-direction:column; align-items:stretch; }
+    .actions{ justify-content:stretch; }
+    .actions .btn{ flex:1; justify-content:center; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="mark"></span>
+      <span class="name">BG<b>del</b></span>
+    </div>
+    <div class="tagline"><span class="dot"></span>Removes backgrounds right in your browser</div>
+  </header>
+
+  <main>
+    <div class="hero" id="hero">
+      <h1>Erase any background <em>in one click.</em></h1>
+      <p>Drop in one or many photos and BGdel cuts out the subject automatically — perfect for profile pics and marketplace listings.</p>
+      <div class="privacy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        100% private — your images never leave your device
+      </div>
+    </div>
+
+    <div class="stage">
+      <!-- UPLOAD -->
+      <div class="dropzone" id="dropzone">
+        <div class="dz-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M12 3v13"/><path d="m7 8 5-5 5 5"/></svg>
+        </div>
+        <div>
+          <div class="dz-title">Drop images here</div>
+          <div class="dz-sub">or click to browse — select multiple at once</div>
+        </div>
+        <button class="dz-btn" id="browseBtn" type="button">Choose images</button>
+        <div class="dz-formats">PNG · JPG · WEBP — up to ~20 MB each</div>
+      </div>
+
+      <!-- WORKSPACE -->
+      <div class="workspace" id="workspace">
+        <div class="canvas-wrap checker" id="canvasWrap">
+          <img class="preview-img" id="previewImg" alt="preview" />
+          <div class="proc" id="proc">
+            <div class="spinner"></div>
+            <div class="proc-status" id="procStatus">Warming up…</div>
+            <div class="bar"></div>
+            <div class="proc-hint" id="procHint">Loading the AI cutout model. The first run downloads it once — later runs are instant.</div>
+          </div>
+        </div>
+
+        <div class="filmstrip" id="filmstrip"></div>
+
+        <div class="toolbar" id="toolbar">
+          <div class="seg" id="seg">
+            <button data-view="original">Original</button>
+            <button data-view="result" class="active">Removed</button>
+          </div>
+          <div class="bd-group">
+            <span class="bd-label">Background</span>
+            <div class="swatches" id="swatches">
+              <button class="sw transparent active" data-bd="transparent" title="Transparent"></button>
+              <button class="sw" data-bd="white" style="background:var(--bake-white)" title="White"></button>
+              <button class="sw" data-bd="dark" style="background:var(--bake-dark)" title="Dark"></button>
+              <button class="sw" data-bd="terra" style="background:var(--bake-terra)" title="Terracotta"></button>
+              <span class="sw custom" id="customSw" title="Custom color">
+                <input type="color" id="customColor" value="#ffcc00" />
+              </span>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-ghost" id="resetBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              New
+            </button>
+            <button class="btn btn-ghost" id="downloadAllBtn" type="button" style="display:none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              Download all
+            </button>
+            <button class="btn btn-primary" id="downloadBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              Download PNG
+            </button>
+          </div>
+        </div>
+
+        <div class="errbox" id="errbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex:none;"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+          <span id="errmsg">Something went wrong.</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>Made with <b>BGdel</b> — all processing happens locally in your browser.</footer>
+
+  <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" multiple hidden />
+
+<script type="module">
+  import { AutoModel, AutoProcessor, RawImage } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
+
+  // BiRefNet_lite — MIT licensed, free for commercial use (ads OK)
+  const MODEL_ID = 'onnx-community/BiRefNet_lite';
+
+  // Prefer WebGPU for speed, but some drivers crash BiRefNet on WebGPU
+  // (BindGroupLayout / computeSliceOffsets validation errors). We start on
+  // WebGPU and transparently fall back to WASM/CPU on the first failure.
+  let device = ('gpu' in navigator) ? 'webgpu' : 'wasm';
+  let modelPromise = null;
+
+  function loadModel(onProgress){
+    if(!modelPromise){
+      modelPromise = (async () => {
+        const model = await AutoModel.from_pretrained(MODEL_ID, {
+          dtype: 'fp32',
+          device,
+          progress_callback: onProgress,
+        });
+        const processor = await AutoProcessor.from_pretrained(MODEL_ID);
+        return { model, processor };
+      })();
+    }
+    return modelPromise;
+  }
+
+  // run the network → { image, mask }
+  async function infer(url, onProgress){
+    const { model, processor } = await loadModel(onProgress);
+    const image = await RawImage.fromURL(url);
+    const { pixel_values } = await processor(image);
+    const { output_image } = await model({ input_image: pixel_values });
+    const mask = await RawImage.fromTensor(
+      output_image[0].sigmoid().mul(255).to('uint8')
+    ).resize(image.width, image.height);
+    return { image, mask };
+  }
+
+  // core: turn an image URL into a transparent-PNG cutout blob
+  async function cutout(url, onProgress){
+    let res;
+    try{
+      res = await infer(url, onProgress);
+    }catch(err){
+      if(device === 'webgpu'){
+        console.warn('WebGPU failed — falling back to WASM/CPU.', err);
+        device = 'wasm';
+        modelPromise = null;            // rebuild model on CPU backend
+        setStatus('Switching to CPU…', 'Your GPU path failed — retrying on CPU (slower, but reliable).');
+        res = await infer(url, onProgress);
+      } else {
+        throw err;
+      }
+    }
+    const { image, mask } = res;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width; canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+    ctx.drawImage(bitmap, 0, 0, image.width, image.height);
+    bitmap.close && bitmap.close();
+
+    const imgData = ctx.getImageData(0, 0, image.width, image.height);
+    const px = imgData.data, m = mask.data, ch = mask.channels || 1;
+    for(let i = 0, n = image.width * image.height; i < n; i++){
+      px[i*4 + 3] = m[i*ch];     // apply mask as alpha
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return await new Promise(res => canvas.toBlob(res, 'image/png'));
+  }
+
+  // file:// pages can't fetch the model — the app must be served over http
+  const IS_FILE = location.protocol === 'file:';
+  const SERVE_HINT = '이 페이지를 파일(file://)로 직접 열면 브라우저가 AI 모델 다운로드를 차단합니다. VS Code의 Live Server 등 http 주소(예: http://127.0.0.1:5500/index.html)로 열어 주세요.';
+
+  const $ = (id) => document.getElementById(id);
+  const dropzone   = $('dropzone');
+  const fileInput  = $('fileInput');
+  const browseBtn  = $('browseBtn');
+  const workspace  = $('workspace');
+  const hero       = $('hero');
+  const canvasWrap = $('canvasWrap');
+  const previewImg = $('previewImg');
+  const proc       = $('proc');
+  const procStatus = $('procStatus');
+  const procHint   = $('procHint');
+  const filmstrip  = $('filmstrip');
+  const toolbar    = $('toolbar');
+  const seg        = $('seg');
+  const swatches   = $('swatches');
+  const customSw   = $('customSw');
+  const customColor= $('customColor');
+  const resetBtn   = $('resetBtn');
+  const downloadBtn= $('downloadBtn');
+  const downloadAllBtn = $('downloadAllBtn');
+  const errbox     = $('errbox');
+  const errmsg     = $('errmsg');
+
+  // ---- preset background colors (used for BOTH preview backdrop and baked export) ----
+  const cs = getComputedStyle(document.documentElement);
+  const PRESETS = {
+    transparent: null,
+    white: cs.getPropertyValue('--bake-white').trim() || '#ffffff',
+    dark:  cs.getPropertyValue('--bake-dark').trim()  || '#34302b',
+    terra: cs.getPropertyValue('--bake-terra').trim() || '#c16a43',
+  };
+
+  // ---- state ----
+  let items = [];          // {id,file,name,base,originalURL,resultBlob,resultURL,status,error}
+  let selectedId = null;
+  let currentView = 'result';
+  let bgColor = null;      // null = transparent, else hex/css color string
+  let idSeq = 0;
+  let queueRunning = false;
+
+  const getItem = (id) => items.find(i => i.id === id);
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+  /* ---------- upload triggers ---------- */
+  browseBtn.addEventListener('click', (e)=>{ e.stopPropagation(); fileInput.click(); });
+  dropzone.addEventListener('click', ()=> fileInput.click());
+  fileInput.addEventListener('change', (e)=>{
+    if(e.target.files && e.target.files.length) handleFiles(e.target.files);
+    fileInput.value = '';
+  });
+
+  ['dragenter','dragover'].forEach(ev =>
+    dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','dragend','drop'].forEach(ev =>
+    dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', (e)=>{
+    if(e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  });
+  // allow dropping anywhere on the page (e.g. onto the workspace to add more)
+  window.addEventListener('dragover', (e)=> e.preventDefault());
+  window.addEventListener('drop', (e)=>{
+    e.preventDefault();
+    if(e.target.closest('#dropzone')) return; // handled above
+    if(e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  });
+  // paste from clipboard
+  window.addEventListener('paste', (e)=>{
+    const data = e.clipboardData && e.clipboardData.items;
+    if(!data) return;
+    const files = [];
+    for(const it of data){ if(it.type.startsWith('image/')) files.push(it.getAsFile()); }
+    if(files.length) handleFiles(files);
+  });
+
+  /* ---------- intake ---------- */
+  function handleFiles(fileList){
+    const files = [...fileList].filter(f => f && f.type.startsWith('image/'));
+    if(!files.length){ showError('That doesn’t look like an image. Try PNG, JPG, or WEBP.'); return; }
+    hideError();
+
+    const wasEmpty = items.length === 0;
+    files.forEach(f => {
+      const id = ++idSeq;
+      items.push({
+        id, file: f,
+        name: f.name || 'image',
+        base: (f.name || 'image').replace(/\.[^.]+$/, '') || 'image',
+        originalURL: URL.createObjectURL(f),
+        resultBlob: null, resultURL: null,
+        status: 'queued', error: null,
+      });
+    });
+
+    enterWorkspace();
+    renderFilmstrip();
+    if(wasEmpty || selectedId == null) selectItem(items[0].id);
+    updateDownloadAll();
+    runQueue();
+  }
+
+  function enterWorkspace(){
+    hero.style.display = 'none';
+    dropzone.style.display = 'none';
+    workspace.classList.add('show');
+  }
+
+  /* ---------- processing queue (sequential) ---------- */
+  async function runQueue(){
+    if(queueRunning) return;
+    queueRunning = true;
+    try{
+      for(;;){
+        const it = items.find(i => i.status === 'queued');
+        if(!it) break;
+        it.status = 'processing';
+        renderFilmstrip();
+        if(it.id === selectedId) renderCanvas();
+
+        try{
+          if(it.id === selectedId) setStatus('Removing background…', 'Analysing your image and isolating the subject.');
+          const blob = await cutout(it.originalURL, (p) => {
+            if(it.id === selectedId) updateProgress(p);
+          });
+          it.resultBlob = blob;
+          it.resultURL = URL.createObjectURL(blob);
+          it.status = 'done';
+        }catch(err){
+          console.error(err);
+          it.status = 'error';
+          it.error = err;
+        }
+
+        renderFilmstrip();
+        updateDownloadAll();
+        if(it.id === selectedId) renderCanvas();
+      }
+    } finally {
+      queueRunning = false;
+    }
+  }
+
+  function updateProgress(p){
+    // transformers.js model-download events: { status, file, progress, loaded, total }
+    if(p && p.status === 'progress'){
+      const pct = (typeof p.progress === 'number') ? Math.round(p.progress) : null;
+      setStatus('Downloading model…',
+        pct!=null ? `One-time download of the AI model — ${pct}%`
+                  : 'One-time download of the AI model. Future images skip this.');
+    } else if(p && (p.status === 'initiate' || p.status === 'download')){
+      setStatus('Downloading model…', 'One-time download of the AI model. Future images skip this.');
+    } else if(p && p.status === 'done'){
+      setStatus('Removing background…', 'Analysing your image and isolating the subject.');
+    }
+  }
+  function setStatus(title, hint){
+    procStatus.textContent = title;
+    if(hint) procHint.textContent = hint;
+  }
+
+  /* ---------- selection / canvas ---------- */
+  function selectItem(id){
+    selectedId = id;
+    const it = getItem(id);
+    currentView = (it && it.status === 'done') ? 'result' : 'original';
+    renderFilmstrip();
+    renderCanvas();
+  }
+
+  function renderCanvas(){
+    const it = getItem(selectedId);
+    applyBackdrop();
+    hideError();
+
+    if(!it){ previewImg.removeAttribute('src'); proc.style.display='none'; return; }
+
+    if(it.status === 'queued' || it.status === 'processing'){
+      previewImg.src = it.originalURL;
+      proc.style.display = 'flex';
+      setStatus('Warming up…', 'Loading the AI cutout model. The first run downloads it once — later runs are instant.');
+    } else if(it.status === 'error'){
+      previewImg.src = it.originalURL;
+      proc.style.display = 'none';
+      showError(IS_FILE
+        ? SERVE_HINT
+        : 'Couldn’t process this image. Check your connection (the model loads online) and try again.');
+    } else { // done
+      proc.style.display = 'none';
+      previewImg.src = (currentView === 'result') ? it.resultURL : it.originalURL;
+    }
+    updateToolbarState();
+  }
+
+  function applyBackdrop(){
+    if(bgColor == null){
+      canvasWrap.classList.add('checker');
+      canvasWrap.style.background = '';
+    } else {
+      canvasWrap.classList.remove('checker');
+      canvasWrap.style.background = bgColor;
+    }
+  }
+
+  function updateToolbarState(){
+    const it = getItem(selectedId);
+    const done = it && it.status === 'done';
+    seg.querySelector('[data-view="result"]').disabled = !done;
+    [...seg.children].forEach(b => b.classList.toggle('active', b.dataset.view === currentView));
+    downloadBtn.disabled = !done;
+  }
+
+  /* ---------- filmstrip ---------- */
+  function renderFilmstrip(){
+    filmstrip.innerHTML = '';
+    items.forEach(it => {
+      const t = document.createElement('button');
+      t.type = 'button';
+      t.className = 'thumb' + (it.id === selectedId ? ' active' : '');
+      const img = document.createElement('img');
+      img.src = it.originalURL; img.alt = it.name;
+      t.appendChild(img);
+
+      if(it.status === 'queued' || it.status === 'processing'){
+        const ov = document.createElement('span');
+        ov.className = 'tstatus';
+        ov.innerHTML = '<span class="mini-spin"></span>';
+        t.appendChild(ov);
+      } else if(it.status === 'done'){
+        const b = document.createElement('span');
+        b.className = 'tbadge ok'; b.textContent = '✓';
+        t.appendChild(b);
+      } else if(it.status === 'error'){
+        const b = document.createElement('span');
+        b.className = 'tbadge err'; b.textContent = '!';
+        t.appendChild(b);
+      }
+
+      t.addEventListener('click', ()=> selectItem(it.id));
+      filmstrip.appendChild(t);
+    });
+
+    // add-more tile
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'thumb add';
+    add.title = 'Add more images';
+    add.textContent = '+';
+    add.addEventListener('click', ()=> fileInput.click());
+    filmstrip.appendChild(add);
+  }
+
+  /* ---------- view toggle ---------- */
+  seg.addEventListener('click', (e)=>{
+    const b = e.target.closest('button');
+    if(!b || b.disabled) return;
+    currentView = b.dataset.view;
+    renderCanvas();
+  });
+
+  /* ---------- background swatches ---------- */
+  swatches.addEventListener('click', (e)=>{
+    const b = e.target.closest('.sw');
+    if(!b || b.classList.contains('custom')) return;
+    setActiveSwatch(b);
+    bgColor = PRESETS[b.dataset.bd] ?? null;
+    renderCanvas();
+  });
+  customColor.addEventListener('input', (e)=>{
+    setActiveSwatch(customSw);
+    bgColor = e.target.value;
+    customSw.style.background = e.target.value;
+    renderCanvas();
+  });
+  function setActiveSwatch(el){
+    [...swatches.querySelectorAll('.sw')].forEach(s => s.classList.toggle('active', s === el));
+  }
+
+  /* ---------- export (bake background if a color is chosen) ---------- */
+  async function exportBlob(it){
+    if(!it || it.status !== 'done') return null;
+    if(bgColor == null) return it.resultBlob; // transparent — use cutout as-is
+    const bmp = await createImageBitmap(it.resultBlob);
+    const c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(bmp, 0, 0);
+    bmp.close && bmp.close();
+    return await new Promise(res => c.toBlob(res, 'image/png'));
+  }
+  function saveBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 4000);
+  }
+  const suffix = () => (bgColor == null ? '-bgdel.png' : '-bgdel-bg.png');
+
+  downloadBtn.addEventListener('click', async ()=>{
+    const it = getItem(selectedId);
+    if(!it || it.status !== 'done') return;
+    const blob = await exportBlob(it);
+    saveBlob(blob, `${it.base}${suffix()}`);
+  });
+
+  downloadAllBtn.addEventListener('click', async ()=>{
+    const done = items.filter(i => i.status === 'done');
+    if(!done.length) return;
+    downloadAllBtn.disabled = true;
+    for(const it of done){
+      const blob = await exportBlob(it);
+      saveBlob(blob, `${it.base}${suffix()}`);
+      await delay(300);
+    }
+    downloadAllBtn.disabled = false;
+  });
+
+  function updateDownloadAll(){
+    const doneCount = items.filter(i => i.status === 'done').length;
+    downloadAllBtn.style.display = doneCount >= 2 ? 'inline-flex' : 'none';
+  }
+
+  /* ---------- reset ---------- */
+  resetBtn.addEventListener('click', ()=>{
+    items.forEach(it => {
+      if(it.originalURL) URL.revokeObjectURL(it.originalURL);
+      if(it.resultURL) URL.revokeObjectURL(it.resultURL);
+    });
+    items = [];
+    selectedId = null;
+    currentView = 'result';
+    bgColor = null;
+    filmstrip.innerHTML = '';
+    workspace.classList.remove('show');
+    hero.style.display = '';
+    dropzone.style.display = 'flex';
+    setActiveSwatch(swatches.querySelector('[data-bd="transparent"]'));
+    canvasWrap.classList.add('checker');
+    canvasWrap.style.background = '';
+    hideError();
+  });
+
+  function showError(msg){ errmsg.textContent = msg; errbox.classList.add('show'); }
+  function hideError(){ errbox.classList.remove('show'); }
+
+  /* ---------- file:// warning on load ---------- */
+  if(IS_FILE){
+    const warn = document.createElement('div');
+    warn.className = 'privacy';
+    warn.style.cssText = 'background:oklch(0.95 0.04 30);border-color:oklch(0.82 0.09 32);color:oklch(0.42 0.12 32);text-align:left;max-width:560px;';
+    warn.textContent = '⚠ ' + SERVE_HINT;
+    hero.appendChild(warn);
+  }
+</script>
+</body>
+</html>
