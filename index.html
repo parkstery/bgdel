@@ -139,12 +139,35 @@
   .workspace{ display:none; flex:1; min-height:0; flex-direction:column; gap:14px; }
   .workspace.show{ display:flex; }
 
+  /* viewer (left) + persistent upload panel (right) */
+  .work-main{ flex:1; min-height:0; display:flex; gap:14px; }
+  .side-upload{
+    flex:none; width:300px; align-self:stretch;
+    border:1.5px dashed var(--line); border-radius:var(--radius);
+    background:radial-gradient(120% 120% at 50% 0%, oklch(0.99 0.006 80) 0%, var(--cream) 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; text-align:center; padding:24px; cursor:pointer;
+    transition:border-color .18s, background .18s;
+  }
+  .side-upload:hover{ border-color:var(--terra); }
+  .side-upload .dz-icon{ width:60px; height:60px; border-radius:18px; }
+  .side-upload .dz-icon svg{ width:28px; height:28px; }
+  .side-upload .dz-title{ font-size:18px; }
+  .side-upload.drag{
+    border-color:var(--terra); border-style:solid;
+    background:radial-gradient(120% 120% at 50% 0%, var(--terra-tint) 0%, var(--cream) 75%);
+  }
+  @media (max-width:780px){
+    .work-main{ flex-direction:column; }
+    .side-upload{ width:auto; align-self:auto; min-height:130px; padding:18px; }
+  }
+
   .canvas-wrap{
-    flex:1; min-height:0; position:relative;
+    flex:1; min-width:0; min-height:0; position:relative;
     border-radius:var(--radius); overflow:hidden;
     border:1px solid var(--line); background:var(--surface);
     box-shadow:var(--shadow);
-    display:grid; place-items:center;
+    display:flex; align-items:center; justify-content:center;
   }
   /* transparency checkerboard */
   .checker{
@@ -161,8 +184,9 @@
   }
 
   .preview-img{
-    width:100%; height:100%;
-    object-fit:contain;            /* always show the WHOLE image, letterboxed */
+    max-width:100%; max-height:100%;
+    width:auto; height:auto;
+    object-fit:contain;            /* whole image, never cropped */
     display:block;
     -webkit-user-drag:none; user-select:none;
   }
@@ -375,13 +399,28 @@
 
       <!-- WORKSPACE -->
       <div class="workspace" id="workspace">
-        <div class="canvas-wrap checker" id="canvasWrap">
-          <img class="preview-img" id="previewImg" alt="preview" />
-          <div class="proc" id="proc">
-            <div class="spinner"></div>
-            <div class="proc-status" id="procStatus">Warming up…</div>
-            <div class="bar"></div>
-            <div class="proc-hint" id="procHint">Loading the cutout engine. The first run downloads a small model — later runs are instant.</div>
+        <div class="work-main">
+          <div class="canvas-wrap checker" id="canvasWrap">
+            <img class="preview-img" id="previewImg" alt="preview" />
+            <div class="proc" id="proc">
+              <div class="spinner"></div>
+              <div class="proc-status" id="procStatus">Warming up…</div>
+              <div class="bar"></div>
+              <div class="proc-hint" id="procHint">Loading the cutout engine. The first run downloads a small model — later runs are instant.</div>
+            </div>
+          </div>
+
+          <!-- persistent uploader — keeps the initial "drop here" feel -->
+          <div class="side-upload" id="sideDrop">
+            <div class="dz-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M12 3v13"/><path d="m7 8 5-5 5 5"/></svg>
+            </div>
+            <div>
+              <div class="dz-title">Drop images here</div>
+              <div class="dz-sub">or click to browse — multiple at once</div>
+            </div>
+            <button class="dz-btn" id="sideBrowse" type="button">Choose images</button>
+            <div class="dz-formats">PNG · JPG · WEBP — up to ~20 MB each</div>
           </div>
         </div>
 
@@ -445,6 +484,8 @@
 
   const $ = (id) => document.getElementById(id);
   const dropzone   = $('dropzone');
+  const sideDrop   = $('sideDrop');
+  const sideBrowse = $('sideBrowse');
   const fileInput  = $('fileInput');
   const browseBtn  = $('browseBtn');
   const workspace  = $('workspace');
@@ -500,11 +541,23 @@
   dropzone.addEventListener('drop', (e)=>{
     if(e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   });
-  // allow dropping anywhere on the page (e.g. onto the workspace to add more)
+
+  // persistent side uploader (workspace) — same behaviour as the initial dropzone
+  sideBrowse.addEventListener('click', (e)=>{ e.stopPropagation(); fileInput.click(); });
+  sideDrop.addEventListener('click', ()=> fileInput.click());
+  ['dragenter','dragover'].forEach(ev =>
+    sideDrop.addEventListener(ev, (e)=>{ e.preventDefault(); sideDrop.classList.add('drag'); }));
+  ['dragleave','dragend','drop'].forEach(ev =>
+    sideDrop.addEventListener(ev, (e)=>{ e.preventDefault(); sideDrop.classList.remove('drag'); }));
+  sideDrop.addEventListener('drop', (e)=>{
+    if(e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  });
+
+  // allow dropping anywhere on the page (e.g. onto the viewer to add more)
   window.addEventListener('dragover', (e)=> e.preventDefault());
   window.addEventListener('drop', (e)=>{
     e.preventDefault();
-    if(e.target.closest('#dropzone')) return; // handled above
+    if(e.target.closest('#dropzone') || e.target.closest('#sideDrop')) return; // handled above
     if(e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   });
   // paste from clipboard
