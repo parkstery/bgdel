@@ -161,8 +161,8 @@
   }
 
   .preview-img{
-    max-width:100%; max-height:100%;
-    width:auto; height:auto; object-fit:contain;
+    width:100%; height:100%;
+    object-fit:contain;            /* always show the WHOLE image, letterboxed */
     display:block;
     -webkit-user-drag:none; user-select:none;
   }
@@ -197,62 +197,75 @@
     0%{ left:-40%; } 100%{ left:100%; }
   }
 
-  /* ---------- filmstrip (batch thumbnails) ---------- */
+  /* ---------- filmstrip (per-image Original / Removed thumbnails) ---------- */
   .filmstrip{
-    display:flex; gap:10px; align-items:center;
+    display:flex; gap:12px; align-items:stretch;
     flex:none; overflow-x:auto; overflow-y:hidden;
-    padding-bottom:2px;
+    padding-bottom:4px;
   }
   .thumb{
-    position:relative; width:60px; height:60px; flex:none;
-    border-radius:12px; overflow:hidden; cursor:pointer; padding:0;
+    position:relative; width:74px; flex:none;
+    border-radius:12px; overflow:hidden;
     border:2px solid var(--line); background:var(--surface);
-    transition:border-color .14s, transform .12s;
+    display:flex; flex-direction:column;
+    transition:border-color .14s, box-shadow .14s;
   }
-  .thumb:hover{ transform:translateY(-2px); }
   .thumb.active{ border-color:var(--terra); box-shadow:0 4px 12px oklch(0.62 0.128 42 / 0.22); }
-  .thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
-  .thumb .tstatus{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    background:oklch(0.97 0.013 78 / 0.6); backdrop-filter:blur(1px);
+  /* each half = one view (top: original, bottom: removed) */
+  .thalf{
+    position:relative; width:100%; height:48px; flex:none;
+    padding:0; border:none; cursor:pointer; display:block; overflow:hidden;
+    background:var(--surface);
   }
-  .thumb .tstatus.done{ display:none; }
+  .thalf + .thalf{ border-top:1px solid var(--line); }
+  .thalf img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .thalf:hover{ filter:brightness(.95); }
+  .thalf.sel{ outline:2.5px solid var(--terra); outline-offset:-2.5px; z-index:1; }
+  .thalf.removed{                       /* checkerboard behind the cutout */
+    --c1: oklch(0.965 0.012 78); --c2: oklch(0.915 0.016 74);
+    background-color:var(--c1);
+    background-image:
+      linear-gradient(45deg, var(--c2) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--c2) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--c2) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--c2) 75%);
+    background-size:12px 12px; background-position:0 0,0 6px,6px -6px,-6px 0;
+  }
+  .thalf.removed img{ object-fit:contain; }
+  .thalf .tlabel{
+    position:absolute; left:0; right:0; bottom:0;
+    font-size:8px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;
+    text-align:center; color:#fff; background:oklch(0 0 0 / .42); padding:1px 0;
+    pointer-events:none;
+  }
+  .thalf .tstatus{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  }
   .mini-spin{
-    width:20px; height:20px; border-radius:50%;
+    width:18px; height:18px; border-radius:50%;
     border:2.5px solid oklch(0.85 0.02 70); border-top-color:var(--terra);
     animation:spin .8s linear infinite;
   }
-  .tbadge{
-    position:absolute; top:3px; right:3px; width:16px; height:16px; border-radius:50%;
-    display:grid; place-items:center; font-size:10px; font-weight:800; color:#fff;
+  .tbadge.err{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:20px; height:20px; border-radius:50%; display:grid; place-items:center;
+    font-size:12px; font-weight:800; color:#fff; background:oklch(0.55 0.18 30);
   }
-  .tbadge.ok{ background:var(--terra); }
-  .tbadge.err{ background:oklch(0.55 0.18 30); }
+  /* persistent "add images" tile, sized to match thumbnails */
   .thumb.add{
-    display:grid; place-items:center; border-style:dashed; background:var(--cream);
-    color:var(--terra); font-size:28px; font-weight:400; line-height:1;
+    border-style:dashed; cursor:pointer;
+    align-items:center; justify-content:center; gap:3px;
+    background:var(--cream); color:var(--terra);
   }
-  .thumb.add:hover{ border-color:var(--terra); }
+  .thumb.add:hover{ border-color:var(--terra); background:var(--cream-deep); }
+  .thumb.add .add-plus{ font-size:26px; line-height:1; font-weight:400; }
+  .thumb.add .add-label{ font-size:10px; font-weight:700; letter-spacing:.03em; }
 
   /* result toolbar */
   .toolbar{
     display:flex; align-items:center; justify-content:space-between;
     gap:18px; flex-wrap:wrap;
   }
-  .seg{
-    display:inline-flex; background:var(--surface); border:1px solid var(--line);
-    border-radius:12px; padding:4px; gap:2px;
-  }
-  .seg button{
-    font-family:var(--font); font-size:13.5px; font-weight:600;
-    color:var(--ink-soft); background:transparent; border:none;
-    padding:8px 15px; border-radius:9px; cursor:pointer;
-    transition:background .14s, color .14s;
-  }
-  .seg button.active{ background:var(--terra); color:var(--cream); }
-  .seg button:not(.active):hover{ color:var(--ink); background:var(--cream-deep); }
-  .seg button:disabled{ opacity:.4; cursor:not-allowed; }
-
   .bd-group{ display:flex; align-items:center; gap:10px; }
   .bd-label{ font-size:12.5px; font-weight:600; color:var(--ink-faint); }
   .swatches{ display:flex; gap:7px; align-items:center; }
@@ -375,10 +388,6 @@
         <div class="filmstrip" id="filmstrip"></div>
 
         <div class="toolbar" id="toolbar">
-          <div class="seg" id="seg">
-            <button data-view="original">Original</button>
-            <button data-view="result" class="active">Removed</button>
-          </div>
           <div class="bd-group">
             <span class="bd-label">Background</span>
             <div class="swatches" id="swatches">
@@ -447,7 +456,6 @@
   const procHint   = $('procHint');
   const filmstrip  = $('filmstrip');
   const toolbar    = $('toolbar');
-  const seg        = $('seg');
   const swatches   = $('swatches');
   const customSw   = $('customSw');
   const customColor= $('customColor');
@@ -569,6 +577,9 @@
           it.error = err;
         }
 
+        // when the currently-viewed image finishes, default to the cutout
+        if(it.id === selectedId && it.status === 'done') currentView = 'result';
+
         renderFilmstrip();
         updateDownloadAll();
         if(it.id === selectedId) renderCanvas();
@@ -594,10 +605,15 @@
   }
 
   /* ---------- selection / canvas ---------- */
-  function selectItem(id){
+  // view: 'original' | 'result' | undefined (auto: result when done)
+  function selectItem(id, view){
     selectedId = id;
     const it = getItem(id);
-    currentView = (it && it.status === 'done') ? 'result' : 'original';
+    if(view){
+      currentView = (view === 'result' && !(it && it.status === 'done')) ? 'original' : view;
+    } else {
+      currentView = (it && it.status === 'done') ? 'result' : 'original';
+    }
     renderFilmstrip();
     renderCanvas();
   }
@@ -639,8 +655,6 @@
   function updateToolbarState(){
     const it = getItem(selectedId);
     const done = it && it.status === 'done';
-    seg.querySelector('[data-view="result"]').disabled = !done;
-    [...seg.children].forEach(b => b.classList.toggle('active', b.dataset.view === currentView));
     downloadBtn.disabled = !done;
   }
 
@@ -648,49 +662,50 @@
   function renderFilmstrip(){
     filmstrip.innerHTML = '';
     items.forEach(it => {
-      const t = document.createElement('button');
-      t.type = 'button';
-      t.className = 'thumb' + (it.id === selectedId ? ' active' : '');
-      const img = document.createElement('img');
-      img.src = it.originalURL; img.alt = it.name;
-      t.appendChild(img);
+      const card = document.createElement('div');
+      card.className = 'thumb' + (it.id === selectedId ? ' active' : '');
 
-      if(it.status === 'queued' || it.status === 'processing'){
-        const ov = document.createElement('span');
-        ov.className = 'tstatus';
-        ov.innerHTML = '<span class="mini-spin"></span>';
-        t.appendChild(ov);
-      } else if(it.status === 'done'){
-        const b = document.createElement('span');
-        b.className = 'tbadge ok'; b.textContent = '✓';
-        t.appendChild(b);
+      // top half — ORIGINAL
+      const top = document.createElement('button');
+      top.type = 'button';
+      top.className = 'thalf orig' +
+        (it.id === selectedId && currentView === 'original' ? ' sel' : '');
+      top.innerHTML =
+        `<img src="${it.originalURL}" alt="${it.name}"><span class="tlabel">Original</span>`;
+      top.addEventListener('click', ()=> selectItem(it.id, 'original'));
+      card.appendChild(top);
+
+      // bottom half — REMOVED (cutout / spinner / error)
+      const bot = document.createElement('button');
+      bot.type = 'button';
+      bot.className = 'thalf removed' +
+        (it.id === selectedId && currentView === 'result' ? ' sel' : '');
+      if(it.status === 'done'){
+        bot.innerHTML =
+          `<img src="${it.resultURL}" alt=""><span class="tlabel">Removed</span>`;
+        bot.addEventListener('click', ()=> selectItem(it.id, 'result'));
       } else if(it.status === 'error'){
-        const b = document.createElement('span');
-        b.className = 'tbadge err'; b.textContent = '!';
-        t.appendChild(b);
+        bot.innerHTML = `<span class="tbadge err">!</span><span class="tlabel">Removed</span>`;
+        bot.addEventListener('click', ()=> selectItem(it.id, 'original'));
+      } else { // queued / processing
+        bot.innerHTML =
+          `<span class="tstatus"><span class="mini-spin"></span></span><span class="tlabel">Removed</span>`;
+        bot.addEventListener('click', ()=> selectItem(it.id, 'original'));
       }
+      card.appendChild(bot);
 
-      t.addEventListener('click', ()=> selectItem(it.id));
-      filmstrip.appendChild(t);
+      filmstrip.appendChild(card);
     });
 
-    // add-more tile
+    // persistent "add images" tile
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'thumb add';
-    add.title = 'Add more images';
-    add.textContent = '+';
+    add.title = 'Add images';
+    add.innerHTML = '<span class="add-plus">+</span><span class="add-label">Add</span>';
     add.addEventListener('click', ()=> fileInput.click());
     filmstrip.appendChild(add);
   }
-
-  /* ---------- view toggle ---------- */
-  seg.addEventListener('click', (e)=>{
-    const b = e.target.closest('button');
-    if(!b || b.disabled) return;
-    currentView = b.dataset.view;
-    renderCanvas();
-  });
 
   /* ---------- background swatches ---------- */
   swatches.addEventListener('click', (e)=>{
